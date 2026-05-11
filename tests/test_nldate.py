@@ -102,5 +102,9 @@ def test_relative_month_names() -> None:
 
 
 def test_unparseable_input_raises_value_error() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        parse("hello world", TODAY)
+    assert type(exc_info.value) is ValueError
+
     with pytest.raises(ValueError):
         parse("sometime after lunch", TODAY)

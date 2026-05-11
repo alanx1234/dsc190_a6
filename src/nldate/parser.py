@@ -8,10 +8,6 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 
-class DateParseError(ValueError):
-    """Raised when a natural-language date cannot be parsed."""
-
-
 @dataclass(frozen=True)
 class Duration:
     years: int = 0
@@ -151,7 +147,7 @@ def parse(s: str, today: date | None = None) -> date:
     text = _normalize(s)
     if not text:
         msg = "date expression must not be empty"
-        raise DateParseError(msg)
+        raise ValueError(msg)
     return _parse_expression(text, reference)
 
 
@@ -171,7 +167,7 @@ def _parse_expression(text: str, today: date) -> date:
         return absolute
 
     msg = f"could not parse date expression: {text!r}"
-    raise DateParseError(msg)
+    raise ValueError(msg)
 
 
 def _parse_relative_expression(text: str, today: date) -> date | None:
@@ -392,7 +388,7 @@ def _parse_duration(text: str) -> Duration:
     duration = _try_parse_duration(text)
     if duration is None:
         msg = f"could not parse duration: {text!r}"
-        raise DateParseError(msg)
+        raise ValueError(msg)
     return duration
 
 
