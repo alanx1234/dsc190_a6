@@ -27,16 +27,16 @@ class Duration:
 MONTHS: dict[str, int] = {
     month.lower(): index for index, month in enumerate(calendar.month_name) if month
 }
-MONTHS.update({
-    month.lower(): index for index, month in enumerate(calendar.month_abbr) if month
-})
+MONTHS.update(
+    {month.lower(): index for index, month in enumerate(calendar.month_abbr) if month}
+)
+MONTHS["sept"] = 9
 
 WEEKDAYS: dict[str, int] = {
     day.lower(): index for index, day in enumerate(calendar.day_name)
 }
-WEEKDAYS.update({
-    day.lower(): index for index, day in enumerate(calendar.day_abbr)
-})
+WEEKDAYS.update({day.lower(): index for index, day in enumerate(calendar.day_abbr)})
+WEEKDAYS.update({"tues": 1, "thur": 3, "thurs": 3})
 
 NUMBER_WORDS: dict[str, int] = {
     "zero": 0,
@@ -70,6 +70,50 @@ NUMBER_WORDS: dict[str, int] = {
     "eighty": 80,
     "ninety": 90,
     "couple": 2,
+}
+
+ORDINAL_WORDS: dict[str, int] = {
+    "first": 1,
+    "second": 2,
+    "third": 3,
+    "fourth": 4,
+    "fifth": 5,
+    "sixth": 6,
+    "seventh": 7,
+    "eighth": 8,
+    "ninth": 9,
+    "tenth": 10,
+    "eleventh": 11,
+    "twelfth": 12,
+    "thirteenth": 13,
+    "fourteenth": 14,
+    "fifteenth": 15,
+    "sixteenth": 16,
+    "seventeenth": 17,
+    "eighteenth": 18,
+    "nineteenth": 19,
+    "twentieth": 20,
+    "twenty-first": 21,
+    "twenty first": 21,
+    "twenty-second": 22,
+    "twenty second": 22,
+    "twenty-third": 23,
+    "twenty third": 23,
+    "twenty-fourth": 24,
+    "twenty fourth": 24,
+    "twenty-fifth": 25,
+    "twenty fifth": 25,
+    "twenty-sixth": 26,
+    "twenty sixth": 26,
+    "twenty-seventh": 27,
+    "twenty seventh": 27,
+    "twenty-eighth": 28,
+    "twenty eighth": 28,
+    "twenty-ninth": 29,
+    "twenty ninth": 29,
+    "thirtieth": 30,
+    "thirty-first": 31,
+    "thirty first": 31,
 }
 
 UNITS = {
@@ -150,6 +194,12 @@ def _parse_relative_expression(text: str, today: date) -> date | None:
     if match := re.fullmatch(r"(.+) ago", text):
         return _parse_duration(match.group(1)).apply_to(today, sign=-1)
 
+    if match := re.fullmatch(r"(.+) (?:later|hence)", text):
+        return _parse_duration(match.group(1)).apply_to(today)
+
+    if match := re.fullmatch(r"(.+) (?:earlier|prior)", text):
+        return _parse_duration(match.group(1)).apply_to(today, sign=-1)
+
     if match := re.fullmatch(r"(.+) (?:from|after) now", text):
         return _parse_duration(match.group(1)).apply_to(today)
 
@@ -167,10 +217,10 @@ def _parse_relative_expression(text: str, today: date) -> date | None:
             sign = -1 if direction == "before" else 1
             return duration.apply_to(anchor, sign=sign)
 
-    if match := re.fullmatch(r"(.+) (plus|minus) (.+)", text):
+    if match := re.fullmatch(r"(.+) (plus|minus|\+|-) (.+)", text):
         anchor_text, direction, amount = match.groups()
         anchor = _parse_expression(anchor_text, today)
-        sign = -1 if direction == "minus" else 1
+        sign = -1 if direction in {"minus", "-"} else 1
         return _parse_duration(amount).apply_to(anchor, sign=sign)
 
     if match := re.fullmatch(r"(next|last) (day|week|month|year)", text):
@@ -178,17 +228,67 @@ def _parse_relative_expression(text: str, today: date) -> date | None:
         sign = 1 if direction == "next" else -1
         return Duration(**{f"{unit}s": 1}).apply_to(today, sign=sign)
 
+    boundary = _parse_period_boundary(text, today)
+    if boundary is not None:
+        return boundary
+
+    if match := re.fullmatch(r"(?:the )?(first|last) day of (.+)", text):
+        which, anchor_text = match.groups()
+        if re.fullmatch(r"\d{4}", anchor_text):
+            year = int(anchor_text)
+            return date(year, 1, 1) if which == "first" else date(year, 12, 31)
+        anchor = _parse_expression(anchor_text, today)
+        if which == "first":
+            return date(anchor.year, anchor.month, 1)
+        return date(
+            anchor.year, anchor.month, calendar.monthrange(anchor.year, anchor.month)[1]
+        )
+
     return None
 
 
+def _parse_period_boundary(text: str, today: date) -> date | None:
+    match = re.fullmatch(
+        r"(?:the )?(first|last|start|beginning|end)(?: day)? of "
+        r"(this|next|last) (week|month|year)",
+        text,
+    )
+    if match is None:
+        return None
+
+    which, modifier, unit = match.groups()
+    is_start = which in {"first", "start", "beginning"}
+
+    if unit == "week":
+        monday = today - timedelta(days=today.weekday())
+        offset = {"last": -7, "this": 0, "next": 7}[modifier]
+        start = monday + timedelta(days=offset)
+        return start if is_start else start + timedelta(days=6)
+
+    if unit == "month":
+        offset = {"last": -1, "this": 0, "next": 1}[modifier]
+        anchor = _add_months(date(today.year, today.month, 1), offset)
+        if is_start:
+            return anchor
+        return date(
+            anchor.year, anchor.month, calendar.monthrange(anchor.year, anchor.month)[1]
+        )
+
+    year = today.year + {"last": -1, "this": 0, "next": 1}[modifier]
+    return date(year, 1, 1) if is_start else date(year, 12, 31)
+
+
 def _parse_weekday_expression(text: str, today: date) -> date | None:
-    if match := re.fullmatch(rf"(next|last|this) ({_WEEKDAY_PATTERN})", text):
+    if match := re.fullmatch(
+        rf"(next|last|this|coming|previous) ({_WEEKDAY_PATTERN})",
+        text,
+    ):
         modifier, weekday_name = match.groups()
         target = WEEKDAYS[weekday_name]
-        if modifier == "next":
+        if modifier in {"next", "coming"}:
             days = (target - today.weekday()) % 7
             return today + timedelta(days=days or 7)
-        if modifier == "last":
+        if modifier in {"last", "previous"}:
             days = (today.weekday() - target) % 7
             return today - timedelta(days=days or 7)
         return today + timedelta(days=(target - today.weekday()) % 7)
@@ -201,10 +301,19 @@ def _parse_weekday_expression(text: str, today: date) -> date | None:
 
 
 def _parse_absolute_date(text: str, today: date) -> date | None:
-    if text == "new years day":
+    if text in {"new years day", "new year day"}:
         return date(today.year, 1, 1)
     if text == "christmas":
         return date(today.year, 12, 25)
+
+    if match := re.fullmatch(
+        rf"(next|last|this) ({_MONTH_PATTERN})(?: (\d{{1,2}}))?",
+        text,
+    ):
+        modifier, month_name, day_text = match.groups()
+        month = MONTHS[month_name]
+        year = _relative_month_year(modifier, month, today)
+        return date(year, month, int(day_text) if day_text is not None else 1)
 
     month_day_year = re.fullmatch(
         rf"({_MONTH_PATTERN}) (\d{{1,2}})(?: (\d{{2,4}}))?",
@@ -225,7 +334,7 @@ def _parse_absolute_date(text: str, today: date) -> date | None:
         return date(year, MONTHS[month_name], int(day_text))
 
     day_of_month_year = re.fullmatch(
-        rf"(?:the )?(\d{{1,2}}) of ({_MONTH_PATTERN})(?: (\d{{2,4}}))?",
+        rf"(\d{{1,2}}) of ({_MONTH_PATTERN})(?: (\d{{2,4}}))?",
         text,
     )
     if day_of_month_year:
@@ -233,10 +342,26 @@ def _parse_absolute_date(text: str, today: date) -> date | None:
         year = _coerce_year(year_text, today.year)
         return date(year, MONTHS[month_name], int(day_text))
 
+    ordinal_month_year = re.fullmatch(
+        rf"(.+) of ({_MONTH_PATTERN})(?: (\d{{2,4}}))?",
+        text,
+    )
+    if ordinal_month_year:
+        day_text, month_name, year_text = ordinal_month_year.groups()
+        day = ORDINAL_WORDS.get(day_text)
+        if day is not None:
+            year = _coerce_year(year_text, today.year)
+            return date(year, MONTHS[month_name], day)
+
     month_year = re.fullmatch(rf"({_MONTH_PATTERN}) (\d{{2,4}})", text)
     if month_year:
         month_name, year_text = month_year.groups()
         return date(_coerce_year(year_text, today.year), MONTHS[month_name], 1)
+
+    year_month_day = re.fullmatch(r"(\d{4})/(\d{1,2})/(\d{1,2})", text)
+    if year_month_day:
+        year_text, month_text, day_text = year_month_day.groups()
+        return date(int(year_text), int(month_text), int(day_text))
 
     iso = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", text)
     if iso:
@@ -249,7 +374,18 @@ def _parse_absolute_date(text: str, today: date) -> date | None:
         year = _coerce_year(year_text, today.year)
         return date(year, int(month_text), int(day_text))
 
+    if re.fullmatch(r"\d{4}", text):
+        return date(int(text), 1, 1)
+
     return None
+
+
+def _relative_month_year(modifier: str, month: int, today: date) -> int:
+    if modifier == "this":
+        return today.year
+    if modifier == "next":
+        return today.year + (1 if month <= today.month else 0)
+    return today.year - (1 if month >= today.month else 0)
 
 
 def _parse_duration(text: str) -> Duration:
@@ -345,6 +481,8 @@ def _coerce_year(year_text: str | None, default: int) -> int:
 
 def _normalize(text: str) -> str:
     normalized = text.strip().lower()
+    normalized = normalized.replace("–", "-")
+    normalized = normalized.replace("—", "-")
     normalized = normalized.replace(",", " ")
     normalized = normalized.replace(".", " ")
     normalized = normalized.replace("'", "")
@@ -355,7 +493,7 @@ def _normalize(text: str) -> str:
 
 
 def _strip_outer_noise(text: str) -> str:
-    for prefix in ("on ", "by ", "at "):
+    for prefix in ("on ", "by ", "at ", "the "):
         if text.startswith(prefix):
             return text[len(prefix) :]
     return text

@@ -47,10 +47,12 @@ def test_ago_duration() -> None:
 
 def test_next_weekday() -> None:
     assert parse("next Tuesday", TODAY) == date(2025, 11, 25)
+    assert parse("coming Tues.", TODAY) == date(2025, 11, 25)
 
 
 def test_last_weekday() -> None:
     assert parse("last Friday", TODAY) == date(2025, 11, 14)
+    assert parse("previous Thurs", TODAY) == date(2025, 11, 13)
 
 
 def test_this_weekday_allows_today() -> None:
@@ -61,15 +63,41 @@ def test_month_name_absolute_dates() -> None:
     assert parse("December 1st, 2025", TODAY) == date(2025, 12, 1)
     assert parse("1 Dec 25", TODAY) == date(2025, 12, 1)
     assert parse("the 5th of May 2025", TODAY) == date(2025, 5, 5)
+    assert parse("first of September 2025", TODAY) == date(2025, 9, 1)
 
 
 def test_numeric_absolute_dates() -> None:
     assert parse("2025-12-01", TODAY) == date(2025, 12, 1)
+    assert parse("2025/12/01", TODAY) == date(2025, 12, 1)
     assert parse("12/1/2025", TODAY) == date(2025, 12, 1)
 
 
 def test_month_arithmetic_clamps_to_last_valid_day() -> None:
     assert parse("1 month after January 31, 2024", TODAY) == date(2024, 2, 29)
+
+
+def test_later_earlier_and_symbol_arithmetic() -> None:
+    assert parse("3 days later", TODAY) == date(2025, 11, 23)
+    assert parse("3 days earlier", TODAY) == date(2025, 11, 17)
+    assert parse("tomorrow + 2 days", TODAY) == date(2025, 11, 23)
+
+
+def test_first_and_last_day_of_relative_month() -> None:
+    assert parse("first day of next month", TODAY) == date(2025, 12, 1)
+    assert parse("last day of next month", TODAY) == date(2025, 12, 31)
+
+
+def test_period_boundaries() -> None:
+    assert parse("start of this week", TODAY) == date(2025, 11, 17)
+    assert parse("end of this week", TODAY) == date(2025, 11, 23)
+    assert parse("last day of next year", TODAY) == date(2026, 12, 31)
+    assert parse("last day of 2025", TODAY) == date(2025, 12, 31)
+
+
+def test_relative_month_names() -> None:
+    assert parse("next January", TODAY) == date(2026, 1, 1)
+    assert parse("next December 5th", TODAY) == date(2025, 12, 5)
+    assert parse("last September", TODAY) == date(2025, 9, 1)
 
 
 def test_unparseable_input_raises_value_error() -> None:
