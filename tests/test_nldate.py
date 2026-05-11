@@ -69,6 +69,7 @@ def test_month_name_absolute_dates() -> None:
 def test_numeric_absolute_dates() -> None:
     assert parse("2025-12-01", TODAY) == date(2025, 12, 1)
     assert parse("2025/12/01", TODAY) == date(2025, 12, 1)
+    assert parse("2025/12/04", TODAY) == date(2025, 12, 4)
     assert parse("12/1/2025", TODAY) == date(2025, 12, 1)
 
 
